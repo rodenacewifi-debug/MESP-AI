@@ -40,17 +40,18 @@ bool showDashboard = input.bool(true, "Show Dashboard", group=GROUP_DISPLAY)
 bool showDebug = input.bool(false, "Debug Mode", group=GROUP_DISPLAY)
 
 //=============================================================================
+
 // SECTION 05
 // FOUNDATION VARIABLES
 //=============================================================================
 
-float trendScore = na
-float structureScore = na
-float momentumScore = na
-float volumeScore = na
-float volatilityScore = na
-float sessionScore = na
-float decisionScore = na
+var float trendScore = na
+var float structureScore = na
+var float momentumScore = na
+var float volumeScore = na
+var float volatilityScore = na
+var float sessionScore = na
+var float decisionScore = na
 
 //=============================================================================
 // SECTION 06
@@ -103,12 +104,6 @@ f_getTrendScore() =>
 
     score
 
-trendScore := f_getTrendScore()
-
-plot(close, "Price")
-
-plot(trendScore, "Trend Score")
-
 //=============================================================================
 // SECTION 09
 // MARKET STRUCTURE INPUTS
@@ -140,6 +135,221 @@ f_getStructureScore() =>
 
     bullish ? 100.0 : bearish ? 0.0 : 50.0
 
-structureScore := f_getStructureScore()
+//=============================================================================
+// SECTION 11
+// MOMENTUM INPUTS
+//=============================================================================
 
+const string GROUP_MOMENTUM = "Momentum Engine"
+
+int rsiLength = input.int(14, "RSI Length", minval = 2, group = GROUP_MOMENTUM)
+
+int macdFast = input.int(12, "MACD Fast", group = GROUP_MOMENTUM)
+
+int macdSlow = input.int(26, "MACD Slow", group = GROUP_MOMENTUM)
+
+int macdSignal = input.int(9, "MACD Signal", group = GROUP_MOMENTUM)
+
+//=============================================================================
+// SECTION 12
+// MOMENTUM ENGINE
+//=============================================================================
+
+f_getMomentumScore() =>
+
+    float rsi = ta.rsi(close, rsiLength)
+
+    [macdLine, signalLine, _] = ta.macd(close, macdFast, macdSlow, macdSignal)
+
+    float score = 50.0
+
+    if rsi > 60 and macdLine > signalLine
+        score := 100.0
+    else if rsi < 40 and macdLine < signalLine
+        score := 0.0
+
+    score
+
+//=============================================================================
+// SECTION 13
+// VOLUME INPUTS
+//=============================================================================
+
+const string GROUP_VOLUME = "Volume Engine"
+
+int volumeLength = input.int(
+    20,
+    "Volume SMA Length",
+    minval = 2,
+    group = GROUP_VOLUME)
+
+float spikeMultiplier = input.float(
+    1.5,
+    "Spike Multiplier",
+    step = 0.1,
+    group = GROUP_VOLUME)
+
+//=============================================================================
+// SECTION 14
+// VOLUME ENGINE
+//=============================================================================
+
+f_getVolumeScore() =>
+
+    float volumeAverage = ta.sma(volume, volumeLength)
+
+    bool highVolume = volume > volumeAverage
+
+    bool spikeVolume = volume > volumeAverage * spikeMultiplier
+
+    float score = 50.0
+
+    if spikeVolume
+        score := 100.0
+    else if highVolume
+        score := 75.0
+    else
+        score := 25.0
+
+    score
+
+//=============================================================================
+// SECTION 15
+// VOLATILITY INPUTS
+//=============================================================================
+
+const string GROUP_VOLATILITY = "Volatility Engine"
+
+int atrLength = input.int(14, "ATR Length", minval=1, group=GROUP_VOLATILITY)
+int atrAverageLength = input.int(20, "ATR Average Length", minval=2, group=GROUP_VOLATILITY)
+
+int bbLength = input.int(20, "BB Length", minval=5, group=GROUP_VOLATILITY)
+float bbMultiplier = input.float(2.0, "BB Multiplier", step=0.1, group=GROUP_VOLATILITY)
+
+//=============================================================================
+// SECTION 16
+// VOLATILITY ENGINE
+//=============================================================================
+
+f_getVolatilityScore() =>
+
+    float atr = ta.atr(atrLength)
+    float atrAverage = ta.sma(atr, atrAverageLength)
+
+    float basis = ta.sma(close, bbLength)
+    float deviation = ta.stdev(close, bbLength) * bbMultiplier
+
+    float upper = basis + deviation
+    float lower = basis - deviation
+
+    float bandWidth = basis != 0.0 ? (upper - lower) / basis * 100.0 : 0.0
+
+    float score = 50.0
+
+    if atr > atrAverage and bandWidth > 5.0
+        score := 100.0
+    else if atr < atrAverage
+        score := 25.0
+
+    f_clamp(score, SCORE_MIN, SCORE_MAX)
+
+//=============================================================================
+// SECTION 80
+// DECISION ENGINE INPUTS
+//=============================================================================
+
+const string GROUP_DECISION = "Decision Engine"
+
+float trendWeight = input.float(30.0, "Trend Weight (%)", minval = 0, maxval = 100, step = 1, group = GROUP_DECISION)
+
+float structureWeight = input.float(25.0, "Structure Weight (%)", minval = 0, maxval = 100, step = 1, group = GROUP_DECISION)
+
+float momentumWeight = input.float(20.0, "Momentum Weight (%)", minval = 0, maxval = 100, step = 1, group = GROUP_DECISION)
+
+float volumeWeight = input.float(10.0, "Volume Weight (%)", minval = 0, maxval = 100, step = 1, group = GROUP_DECISION)
+
+float volatilityWeight = input.float(10.0, "Volatility Weight (%)", minval = 0, maxval = 100, step = 1, group = GROUP_DECISION)
+
+float sessionWeight = input.float(5.0, "Session Weight (%)", minval = 0, maxval = 100, step = 1, group = GROUP_DECISION)
+
+//=============================================================================
+// SECTION 81
+// DECISION ENGINE
+//=============================================================================
+
+f_getDecisionScore(
+    float trend,
+    float structure,
+    float momentum,
+    float volume,
+    float volatility,
+    float session) =>
+
+    float totalWeight =
+          trendWeight
+        + structureWeight
+        + momentumWeight
+        + volumeWeight
+        + volatilityWeight
+        + sessionWeight
+
+    float weightedScore =
+          trend * trendWeight
+        + structure * structureWeight
+        + momentum * momentumWeight
+        + volume * volumeWeight
+        + volatility * volatilityWeight
+        + session * sessionWeight
+
+    totalWeight > 0 ? weightedScore / totalWeight : 50.0
+
+//=============================================================================
+// SECTION 82
+// MARKET BIAS
+//=============================================================================
+
+f_getMarketBias(float score) =>
+
+    score >= LONG_THRESHOLD ?
+        "LONG" :
+    score <= SHORT_THRESHOLD ?
+        "SHORT" :
+        "NEUTRAL"
+
+//=============================================================================
+// SECTION 99
+// MAIN PROGRAM
+//=============================================================================
+
+trendScore := f_getTrendScore()
+structureScore := f_getStructureScore()
+momentumScore := f_getMomentumScore()
+volumeScore := f_getVolumeScore()
+volatilityScore := f_getVolatilityScore()
+
+// Temporary until Session Engine is implemented
+sessionScore := 50.0
+
+decisionScore := f_getDecisionScore(
+    trendScore,
+    structureScore,
+    momentumScore,
+    volumeScore,
+    volatilityScore,
+    sessionScore)
+
+string marketBias = f_getMarketBias(decisionScore)
+
+//=============================================================================
+// SECTION 98
+// VISUALIZATION
+//=============================================================================
+
+plot(close, "Price")
+plot(trendScore, "Trend Score")
 plot(structureScore, "Structure Score")
+plot(momentumScore, "Momentum Score")
+plot(volumeScore, "Volume Score")
+plot(volatilityScore, "Volatility Score")
+plot(decisionScore, "Decision Score", linewidth = 2)
+plot(decisionScore, "Decision Score", linewidth = 2)
