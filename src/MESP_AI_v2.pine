@@ -1,0 +1,145 @@
+//@version=6
+strategy("MESP AI v2.0.0", shorttitle="MESP AI", overlay=true, initial_capital=100000, pyramiding=0, commission_type=strategy.commission.percent, commission_value=0.10)
+
+//=============================================================================
+// SECTION 01
+// PROJECT INFORMATION
+//=============================================================================
+
+const string VERSION = "2.0.0"
+const string BUILD = "Foundation"
+
+//=============================================================================
+// SECTION 02
+// CONSTANTS
+//=============================================================================
+
+const float SCORE_MIN = 0.0
+const float SCORE_MAX = 100.0
+
+const float LONG_THRESHOLD = 70.0
+const float SHORT_THRESHOLD = 30.0
+
+//=============================================================================
+// SECTION 03
+// INPUT GROUPS
+//=============================================================================
+
+const string GROUP_GENERAL = "General"
+const string GROUP_DISPLAY = "Display"
+
+//=============================================================================
+// SECTION 04
+// USER INPUTS
+//=============================================================================
+
+bool enableLong = input.bool(true, "Enable Long", group=GROUP_GENERAL)
+bool enableShort = input.bool(true, "Enable Short", group=GROUP_GENERAL)
+
+bool showDashboard = input.bool(true, "Show Dashboard", group=GROUP_DISPLAY)
+bool showDebug = input.bool(false, "Debug Mode", group=GROUP_DISPLAY)
+
+//=============================================================================
+// SECTION 05
+// FOUNDATION VARIABLES
+//=============================================================================
+
+float trendScore = na
+float structureScore = na
+float momentumScore = na
+float volumeScore = na
+float volatilityScore = na
+float sessionScore = na
+float decisionScore = na
+
+//=============================================================================
+// SECTION 06
+// UTILITY LIBRARY
+//=============================================================================
+
+// Convert a value into a percentage of a maximum value.
+f_percent(float value, float maximum) =>
+    maximum == 0.0 ? 0.0 : value / maximum * 100.0
+
+// Clamp a value within a minimum and maximum range.
+f_clamp(float value, float minimum, float maximum) =>
+    math.max(minimum, math.min(maximum, value))
+
+// Normalize a value from one range to 0–100.
+f_normalize(float value, float sourceMin, float sourceMax) =>
+    sourceMax == sourceMin ? 0.0 : (value - sourceMin) / (sourceMax - sourceMin) * 100.0
+
+// Safe division to avoid division-by-zero.
+f_safeDivide(float numerator, float denominator) =>
+    denominator == 0.0 ? 0.0 : numerator / denominator
+
+// Round to two decimal places.
+f_round2(float value) =>
+    math.round(value * 100.0) / 100.0
+
+//=============================================================================
+// SECTION 07
+// TREND ENGINE INPUTS
+//=============================================================================
+
+const string GROUP_TREND = "Trend Engine"
+
+int fastEMA = input.int(20, "Fast EMA", minval = 1, group = GROUP_TREND)
+
+int slowEMA = input.int(50, "Slow EMA", minval = 2, group = GROUP_TREND)
+
+//=============================================================================
+// SECTION 08
+// TREND ENGINE
+//=============================================================================
+
+f_getTrendScore() =>
+
+    float fast = ta.ema(close, fastEMA)
+
+    float slow = ta.ema(close, slowEMA)
+
+    float score = fast > slow ? 100.0 : 0.0
+
+    score
+
+trendScore := f_getTrendScore()
+
+plot(close, "Price")
+
+plot(trendScore, "Trend Score")
+
+//=============================================================================
+// SECTION 09
+// MARKET STRUCTURE INPUTS
+//=============================================================================
+
+const string GROUP_STRUCTURE = "Market Structure"
+
+int swingLength = input.int(
+    5,
+    "Swing Length",
+    minval = 2,
+    maxval = 20,
+    group = GROUP_STRUCTURE)
+
+//=============================================================================
+// SECTION 10
+// MARKET STRUCTURE ENGINE
+//=============================================================================
+
+f_getStructureScore() =>
+
+    float swingHigh = ta.highest(high, swingLength)
+
+    float swingLow = ta.lowest(low, swingLength)
+
+    bool bullish = close > swingHigh[1]
+
+    bool bearish = close < swingLow[1]
+
+    bullish ? 100.0 : bearish ? 0.0 : 50.0
+
+structureScore := f_getStructureScore()
+
+plot(structureScore, "Structure Score")
